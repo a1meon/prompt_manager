@@ -49,6 +49,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
+  const [renameGroupOpen, setRenameGroupOpen] = useState(false);
+  const [renameGroupId, setRenameGroupId] = useState('');
+  const [renameGroupName, setRenameGroupName] = useState('');
   const [contextMenu, setContextMenu] = useState<{ open: boolean; x: number; y: number }>({
     open: false,
     x: 0,
@@ -158,12 +161,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const renameGroup = (groupId: string) => {
     const current = groups.find(g => g.id === groupId);
     if (!current) return;
-    const nextName = window.prompt('输入新的组名称', current.name);
-    if (!nextName) return;
-    setLayout(
-      groups.map(g => (g.id === groupId ? { ...g, name: nextName.trim() || g.name } : g)),
-      sidebarOrder
-    );
+    setRenameGroupId(groupId);
+    setRenameGroupName(current.name || '');
+    setRenameGroupOpen(true);
   };
 
   const deleteGroup = (groupId: string) => {
@@ -271,7 +271,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }}
                 >
                   <FolderPlus className="w-4 h-4 text-slate-500" />
-                  创建组
+                  创建分组
                 </button>
               </div>
             )}
@@ -352,6 +352,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       type="button"
                       draggable
                       onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
                       onDragStart={(e) => {
                         e.stopPropagation();
@@ -385,10 +386,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         e.stopPropagation();
                         renameGroup(group.id);
                       }}
+                      onPointerDown={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
                       draggable={false}
                       className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300"
-                      title="重命名分组"
+                      title="编辑分组"
                     >
                       <Edit2 className="w-3 h-3" />
                     </button>
@@ -398,6 +400,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         e.stopPropagation();
                         deleteGroup(group.id);
                       }}
+                      onPointerDown={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
                       draggable={false}
                       className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-red-500"
@@ -639,7 +642,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }}
             >
               <FolderPlus className="w-4 h-4 text-slate-500" />
-              创建组
+                  创建分组
             </button>
           </div>
         </div>
@@ -647,7 +650,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {createGroupOpen && (
         <div
-          className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[120]"
           onClick={() => setCreateGroupOpen(false)}
         >
           <div
@@ -656,13 +659,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <div className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
               <FolderPlus className="w-4 h-4 text-indigo-600" />
-              创建组
+              创建分组
             </div>
             <div className="mt-3">
               <input
                 value={newGroupName}
                 onChange={(e) => setNewGroupName(e.target.value)}
-                placeholder="输入组名称"
+                placeholder="输入分组名称"
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-indigo-500 focus:ring-inset focus:outline-none"
                 autoFocus
               />
@@ -681,6 +684,58 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="px-3 py-1.5 rounded-lg text-sm bg-indigo-600 hover:bg-indigo-500 text-white"
               >
                 创建
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {renameGroupOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[120]"
+          onClick={() => setRenameGroupOpen(false)}
+        >
+          <div
+            className="w-full max-w-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+              <Edit2 className="w-4 h-4 text-indigo-600" />
+              编辑分组
+            </div>
+            <div className="mt-3">
+              <input
+                value={renameGroupName}
+                onChange={(e) => setRenameGroupName(e.target.value)}
+                placeholder="输入分组名称"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-indigo-500 focus:ring-inset focus:outline-none"
+                autoFocus
+              />
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRenameGroupOpen(false)}
+                className="px-3 py-1.5 rounded-lg text-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const name = renameGroupName.trim();
+                  if (!name) return;
+                  setLayout(
+                    groups.map(g => (g.id === renameGroupId ? { ...g, name } : g)),
+                    sidebarOrder
+                  );
+                  setRenameGroupOpen(false);
+                  setRenameGroupId('');
+                  setRenameGroupName('');
+                }}
+                className="px-3 py-1.5 rounded-lg text-sm bg-indigo-600 hover:bg-indigo-500 text-white"
+              >
+                保存
               </button>
             </div>
           </div>

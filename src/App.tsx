@@ -1364,7 +1364,7 @@ export default function App() {
                         {(() => {
                           const g = templateGroups.find(x => x.id === editingGroupId);
                           if (g) return g.name;
-                          return templateGroups.length === 0 ? '请先创建组' : '选择分组';
+                          return templateGroups.length === 0 ? '请先创建分组' : '选择分组';
                         })()}
                       </div>
                       <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform", editorGroupPickerOpen && "rotate-180")} />
@@ -1404,7 +1404,7 @@ export default function App() {
                           }}
                           className="w-full border border-dashed border-slate-300 dark:border-slate-600 rounded-lg py-2 text-sm text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center"
                         >
-                          创建组
+                          创建分组
                         </button>
                       </div>
                     </div>
@@ -1500,7 +1500,7 @@ export default function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold dark:text-white">创建组</h3>
+              <h3 className="text-lg font-bold dark:text-white">创建分组</h3>
               <button
                 type="button"
                 onClick={() => setEditorCreateGroupOpen(false)}
