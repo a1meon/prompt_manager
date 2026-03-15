@@ -182,7 +182,7 @@ function parseChangelog(raw: string): ChangelogRelease[] {
   }
 
   pushRelease();
-  return releases.filter(r => Boolean(r.version));
+  return releases.filter(r => Boolean(r.version) && r.version !== 'Unreleased');
 }
 
 function getSelectionOffsetsWithin(root: HTMLElement) {
@@ -468,7 +468,7 @@ export default function App() {
     | { step: 'idle' }
     | { step: 'checking' }
     | { step: 'none'; currentVersion: string }
-    | { step: 'available'; currentVersion: string; latestVersion: string; releaseUrl?: string }
+    | { step: 'available'; currentVersion: string; latestVersion: string; releaseUrl?: string; provider?: 'gitee' | 'github' }
     | { step: 'downloading'; latestVersion: string; percent: number; transferred: number; total: number; bytesPerSecond: number }
     | { step: 'downloaded'; latestVersion: string }
     | { step: 'error'; message: string }
@@ -586,7 +586,9 @@ export default function App() {
         safeSetUpdateState({
           step: 'available',
           currentVersion,
-          latestVersion: latest
+          latestVersion: latest,
+          releaseUrl: typeof result.releaseUrl === 'string' ? result.releaseUrl : undefined,
+          provider: result.source === 'gitee' || result.source === 'github' ? result.source : undefined
         });
         return;
       }
@@ -595,20 +597,36 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('https://api.github.com/repos/a1meon/prompt_manager_release/releases/latest');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const tag = String(data?.tag_name || '').replace(/^v/i, '');
-      const url = String(data?.html_url || '');
-      if (!tag) throw new Error('无法解析版本号');
-      if (compareSemver(tag, currentVersion) <= 0) {
-        safeSetUpdateState({ step: 'none', currentVersion });
-        safeCloseUpdateModal(900);
+      const giteeRes = await fetch('https://gitee.com/api/v5/repos/a1meon/prompt_manager_release/releases/latest');
+      if (!giteeRes.ok) throw new Error(`Gitee HTTP ${giteeRes.status}`);
+      const giteeData = await giteeRes.json();
+      const giteeTag = String(giteeData?.tag_name || giteeData?.name || '').replace(/^v/i, '');
+      const giteeUrl = 'https://gitee.com/a1meon/prompt_manager_release/releases';
+      if (!giteeTag) throw new Error('无法解析 Gitee 版本号');
+      if (compareSemver(giteeTag, currentVersion) > 0) {
+        safeSetUpdateState({ step: 'available', currentVersion, latestVersion: giteeTag, releaseUrl: giteeUrl, provider: 'gitee' });
         return;
       }
-      safeSetUpdateState({ step: 'available', currentVersion, latestVersion: tag, releaseUrl: url });
+
+      safeSetUpdateState({ step: 'none', currentVersion });
+      safeCloseUpdateModal(900);
     } catch (err) {
-      safeSetUpdateState({ step: 'error', message: String((err as any)?.message || err || '') });
+      try {
+        const res = await fetch('https://api.github.com/repos/a1meon/prompt_manager_release/releases/latest');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const tag = String(data?.tag_name || '').replace(/^v/i, '');
+        const url = String(data?.html_url || '');
+        if (!tag) throw new Error('无法解析版本号');
+        if (compareSemver(tag, currentVersion) <= 0) {
+          safeSetUpdateState({ step: 'none', currentVersion });
+          safeCloseUpdateModal(900);
+          return;
+        }
+        safeSetUpdateState({ step: 'available', currentVersion, latestVersion: tag, releaseUrl: url, provider: 'github' });
+      } catch (innerErr) {
+        safeSetUpdateState({ step: 'error', message: String((innerErr as any)?.message || innerErr || '') });
+      }
     }
   }, [compareSemver]);
 
@@ -664,9 +682,6 @@ export default function App() {
       }
       if (res.status === 'downloaded') {
         setUpdateState({ step: 'downloaded', latestVersion: updateState.latestVersion });
-        window.setTimeout(() => {
-          window.appUpdate?.quitAndInstall?.();
-        }, 300);
         return;
       }
       setUpdateState({ step: 'error', message: String(res?.message || '下载更新失败') });
@@ -1736,6 +1751,7 @@ export default function App() {
                 <div className="space-y-1">
                   <div>当前版本：v{updateState.currentVersion}</div>
                   <div>最新版本：v{updateState.latestVersion}</div>
+                  {updateState.provider && <div>更新源：{updateState.provider === 'gitee' ? 'Gitee' : 'GitHub'}</div>}
                 </div>
               )}
               {updateState.step === 'downloading' && `正在下载更新（v${updateState.latestVersion}）…`}

@@ -6,7 +6,7 @@ declare global {
       getVersion: () => Promise<string> | string;
       checkForUpdates: () => Promise<
         | { status: 'no_update' }
-        | { status: 'update_available'; version: string; releaseName?: string; releaseNotes?: string }
+        | { status: 'update_available'; version: string; source?: 'gitee' | 'github'; releaseUrl?: string; releaseName?: string; releaseNotes?: string }
         | { status: 'error'; message: string }
       >;
       downloadUpdate: () => Promise<

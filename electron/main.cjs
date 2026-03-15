@@ -1,7 +1,12 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const https = require('https');
+const fs = require('fs');
+const { spawn } = require('child_process');
 let mainWindow = null;
 let splashWindow = null;
+let pendingUpdate = null;
+let downloadedInstallerPath = null;
 
 app.setName('一世提示词管理');
 
@@ -151,6 +156,135 @@ function getDialogParent() {
   return null;
 }
 
+function compareSemver(a, b) {
+  const pa = String(a || '').replace(/^v/i, '').split('.').map(n => Number(n || 0));
+  const pb = String(b || '').replace(/^v/i, '').split('.').map(n => Number(n || 0));
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const da = pa[i] ?? 0;
+    const db = pb[i] ?? 0;
+    if (da > db) return 1;
+    if (da < db) return -1;
+  }
+  return 0;
+}
+
+function fetchJson(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(
+      url,
+      {
+        headers: {
+          Accept: 'application/json'
+        }
+      },
+      (res) => {
+        const status = Number(res.statusCode || 0);
+        if (status < 200 || status >= 300) {
+          res.resume();
+          reject(new Error(`HTTP ${status}`));
+          return;
+        }
+        let raw = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          raw += chunk;
+        });
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(raw));
+          } catch (e) {
+            reject(e);
+          }
+        });
+      }
+    );
+    req.on('error', reject);
+    if (timeoutMs && timeoutMs > 0) {
+      req.setTimeout(timeoutMs, () => {
+        req.destroy(new Error('timeout'));
+      });
+    }
+  });
+}
+
+function pickGiteeInstallerAsset(assets) {
+  const list = Array.isArray(assets) ? assets : [];
+  const items = list
+    .map(a => ({
+      name: String(a?.name || ''),
+      url: String(a?.browser_download_url || a?.url || '')
+    }))
+    .filter(a => a.url && /\.exe(\?|$)/i.test(a.url));
+
+  const preferred =
+    items.find(a => /(安装程序|setup)/i.test(a.name) && /\.exe(\?|$)/i.test(a.url)) ||
+    items.find(a => /(安装程序|setup)/i.test(a.url)) ||
+    items[0];
+
+  return preferred ? preferred.url : '';
+}
+
+async function checkGiteeLatest() {
+  const apiUrl = 'https://gitee.com/api/v5/repos/a1meon/prompt_manager_release/releases/latest';
+  const data = await fetchJson(apiUrl, 3500);
+  const tag = String(data?.tag_name || data?.name || '').trim();
+  const version = tag.replace(/^v/i, '').trim();
+  if (!version) throw new Error('无法解析 Gitee 版本号');
+  const downloadUrl = pickGiteeInstallerAsset(data?.assets);
+  return {
+    version,
+    downloadUrl,
+    releaseUrl: 'https://gitee.com/a1meon/prompt_manager_release/releases'
+  };
+}
+
+function downloadFileWithProgress(url, outPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, (res) => {
+      const status = Number(res.statusCode || 0);
+      if (status >= 300 && status < 400 && res.headers.location) {
+        res.resume();
+        downloadFileWithProgress(String(res.headers.location), outPath, onProgress).then(resolve, reject);
+        return;
+      }
+      if (status < 200 || status >= 300) {
+        res.resume();
+        reject(new Error(`HTTP ${status}`));
+        return;
+      }
+
+      const total = Number(res.headers['content-length'] || 0);
+      let transferred = 0;
+      const file = fs.createWriteStream(outPath);
+      res.on('data', (chunk) => {
+        transferred += chunk.length;
+        if (typeof onProgress === 'function') {
+          const percent = total > 0 ? (transferred / total) * 100 : 0;
+          onProgress({
+            percent,
+            transferred,
+            total,
+            bytesPerSecond: 0
+          });
+        }
+      });
+      res.on('error', (err) => {
+        file.close(() => reject(err));
+      });
+      file.on('error', (err) => {
+        res.destroy(err);
+        file.close(() => reject(err));
+      });
+      res.pipe(file);
+      file.on('finish', () => {
+        file.close(() => resolve());
+      });
+    });
+    req.on('error', reject);
+  });
+}
+
 app.whenReady().then(() => {
   ipcMain.handle('app:getVersion', () => app.getVersion());
 
@@ -158,6 +292,28 @@ app.whenReady().then(() => {
     if (!app.isPackaged) {
       return { status: 'error', message: '开发模式不支持自动更新检查' };
     }
+
+    pendingUpdate = null;
+    downloadedInstallerPath = null;
+
+    const currentVersion = app.getVersion();
+    try {
+      const gitee = await checkGiteeLatest();
+      if (compareSemver(gitee.version, currentVersion) > 0 && gitee.downloadUrl) {
+        pendingUpdate = { source: 'gitee', version: gitee.version, downloadUrl: gitee.downloadUrl };
+        return {
+          status: 'update_available',
+          version: gitee.version,
+          source: 'gitee',
+          releaseUrl: gitee.releaseUrl
+        };
+      }
+      if (compareSemver(gitee.version, currentVersion) <= 0) {
+        return { status: 'no_update' };
+      }
+    } catch {
+    }
+
     let autoUpdater;
     try {
       ({ autoUpdater } = require('electron-updater'));
@@ -179,9 +335,11 @@ app.whenReady().then(() => {
     try {
       const result = await autoUpdater.checkForUpdates();
       if (!result || !result.updateInfo || !result.updateInfo.version) return { status: 'no_update' };
+      pendingUpdate = { source: 'github', version: result.updateInfo.version };
       return {
         status: 'update_available',
         version: result.updateInfo.version,
+        source: 'github',
         releaseName: result.updateInfo.releaseName,
         releaseNotes: typeof result.updateInfo.releaseNotes === 'string' ? result.updateInfo.releaseNotes : ''
       };
@@ -192,6 +350,29 @@ app.whenReady().then(() => {
 
   ipcMain.handle('update:download', async (event) => {
     if (!app.isPackaged) return { status: 'error', message: '开发模式不支持自动更新下载' };
+
+    if (pendingUpdate?.source === 'gitee' && pendingUpdate.downloadUrl) {
+      const wc = event.sender;
+      const version = String(pendingUpdate.version || '').replace(/^v/i, '');
+      const safeVersion = version || 'latest';
+      const fileName = `prompt-manager-setup-${safeVersion}.exe`;
+      const outPath = path.join(app.getPath('temp'), fileName);
+      try {
+        await downloadFileWithProgress(pendingUpdate.downloadUrl, outPath, (info) => {
+          wc.send('update:downloadProgress', {
+            percent: Number(info?.percent || 0),
+            transferred: Number(info?.transferred || 0),
+            total: Number(info?.total || 0),
+            bytesPerSecond: Number(info?.bytesPerSecond || 0)
+          });
+        });
+        downloadedInstallerPath = outPath;
+        return { status: 'downloaded' };
+      } catch (err) {
+        return { status: 'error', message: String(err?.message || err || '') };
+      }
+    }
+
     let autoUpdater;
     try {
       ({ autoUpdater } = require('electron-updater'));
@@ -237,6 +418,15 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('update:quitAndInstall', () => {
+    if (pendingUpdate?.source === 'gitee' && downloadedInstallerPath && fs.existsSync(downloadedInstallerPath)) {
+      try {
+        spawn(downloadedInstallerPath, [], { detached: true, stdio: 'ignore' }).unref();
+        app.quit();
+        return;
+      } catch {
+        return;
+      }
+    }
     let autoUpdater;
     try {
       ({ autoUpdater } = require('electron-updater'));
