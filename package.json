@@ -76,7 +76,7 @@
       {
         "provider": "github",
         "owner": "a1meon",
-        "repo": "prompt_manager"
+        "repo": "prompt_manager_release"
       }
     ],
     "nsis": {
