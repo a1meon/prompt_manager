@@ -395,18 +395,22 @@ export default function App() {
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
+  const [updateSource, setUpdateSource] = useState<'manual' | 'startup'>('manual');
   const [updateState, setUpdateState] = useState<
     | { step: 'idle' }
     | { step: 'checking' }
     | { step: 'none'; currentVersion: string }
     | { step: 'available'; currentVersion: string; latestVersion: string; releaseUrl?: string }
-    | { step: 'downloading'; latestVersion: string }
+    | { step: 'downloading'; latestVersion: string; percent: number; transferred: number; total: number; bytesPerSecond: number }
     | { step: 'downloaded'; latestVersion: string }
     | { step: 'error'; message: string }
   >({ step: 'idle' });
 
   const helpMenuRef = useRef<HTMLDivElement | null>(null);
   const editorGroupPickerRef = useRef<HTMLDivElement | null>(null);
+  const startupUpdateCancelledRef = useRef(false);
+  const startupUpdateRanRef = useRef(false);
+  const downloadProgressOffRef = useRef<null | (() => void)>(null);
 
   useEffect(() => {
     const api = window.appWindow;
@@ -474,11 +478,24 @@ export default function App() {
     return 0;
   }, []);
 
-  const checkForUpdates = useCallback(async () => {
+  const checkForUpdatesWithSource = useCallback(async (source: 'manual' | 'startup') => {
     setUpdateOpen(true);
+    setUpdateSource(source);
+    if (source === 'startup') startupUpdateCancelledRef.current = false;
     setUpdateState({ step: 'checking' });
 
     const currentVersion = __APP_VERSION__;
+    const safeSetUpdateState = (next: Parameters<typeof setUpdateState>[0]) => {
+      if (source === 'startup' && startupUpdateCancelledRef.current) return;
+      setUpdateState(next);
+    };
+    const safeCloseUpdateModal = (delayMs: number) => {
+      if (source !== 'startup') return;
+      window.setTimeout(() => {
+        if (startupUpdateCancelledRef.current) return;
+        setUpdateOpen(false);
+      }, delayMs);
+    };
 
     if (window.appUpdate?.checkForUpdates) {
       const result: any = await Promise.resolve(window.appUpdate.checkForUpdates()).catch((err: any) => ({
@@ -486,23 +503,25 @@ export default function App() {
         message: String(err?.message || err || '')
       }));
       if (result.status === 'no_update') {
-        setUpdateState({ step: 'none', currentVersion });
+        safeSetUpdateState({ step: 'none', currentVersion });
+        safeCloseUpdateModal(900);
         return;
       }
       if (result.status === 'update_available') {
         const latest = String(result.version || '');
         if (compareSemver(latest, currentVersion) <= 0) {
-          setUpdateState({ step: 'none', currentVersion });
+          safeSetUpdateState({ step: 'none', currentVersion });
+          safeCloseUpdateModal(900);
           return;
         }
-        setUpdateState({
+        safeSetUpdateState({
           step: 'available',
           currentVersion,
           latestVersion: latest
         });
         return;
       }
-      setUpdateState({ step: 'error', message: String(result?.message || '检查更新失败') });
+      safeSetUpdateState({ step: 'error', message: String(result?.message || '检查更新失败') });
       return;
     }
 
@@ -514,25 +533,71 @@ export default function App() {
       const url = String(data?.html_url || '');
       if (!tag) throw new Error('无法解析版本号');
       if (compareSemver(tag, currentVersion) <= 0) {
-        setUpdateState({ step: 'none', currentVersion });
+        safeSetUpdateState({ step: 'none', currentVersion });
+        safeCloseUpdateModal(900);
         return;
       }
-      setUpdateState({ step: 'available', currentVersion, latestVersion: tag, releaseUrl: url });
+      safeSetUpdateState({ step: 'available', currentVersion, latestVersion: tag, releaseUrl: url });
     } catch (err) {
-      setUpdateState({ step: 'error', message: String((err as any)?.message || err || '') });
+      safeSetUpdateState({ step: 'error', message: String((err as any)?.message || err || '') });
     }
   }, [compareSemver]);
+
+  const checkForUpdates = useCallback(() => {
+    checkForUpdatesWithSource('manual');
+  }, [checkForUpdatesWithSource]);
+
+  const cancelStartupUpdateCheck = useCallback(() => {
+    if (updateState.step === 'downloading' || updateState.step === 'downloaded') return;
+    if (updateSource === 'startup') startupUpdateCancelledRef.current = true;
+    setUpdateOpen(false);
+    setUpdateSource('manual');
+    setUpdateState({ step: 'idle' });
+  }, [updateSource, updateState.step]);
 
   const startDownloadAndInstall = useCallback(async () => {
     if (updateState.step !== 'available') return;
     if (window.appUpdate?.downloadUpdate) {
-      setUpdateState({ step: 'downloading', latestVersion: updateState.latestVersion });
+      if (downloadProgressOffRef.current) {
+        downloadProgressOffRef.current();
+        downloadProgressOffRef.current = null;
+      }
+      if (window.appUpdate?.onDownloadProgress) {
+        downloadProgressOffRef.current = window.appUpdate.onDownloadProgress((info) => {
+          setUpdateState(prev => {
+            if (prev.step !== 'downloading') return prev;
+            return {
+              ...prev,
+              percent: Number(info?.percent ?? prev.percent),
+              transferred: Number(info?.transferred ?? prev.transferred),
+              total: Number(info?.total ?? prev.total),
+              bytesPerSecond: Number(info?.bytesPerSecond ?? prev.bytesPerSecond)
+            };
+          });
+        });
+      }
+
+      setUpdateState({
+        step: 'downloading',
+        latestVersion: updateState.latestVersion,
+        percent: 0,
+        transferred: 0,
+        total: 0,
+        bytesPerSecond: 0
+      });
       const res: any = await Promise.resolve(window.appUpdate.downloadUpdate()).catch((err: any) => ({
         status: 'error',
         message: String(err?.message || err || '')
       }));
+      if (downloadProgressOffRef.current) {
+        downloadProgressOffRef.current();
+        downloadProgressOffRef.current = null;
+      }
       if (res.status === 'downloaded') {
         setUpdateState({ step: 'downloaded', latestVersion: updateState.latestVersion });
+        window.setTimeout(() => {
+          window.appUpdate?.quitAndInstall?.();
+        }, 300);
         return;
       }
       setUpdateState({ step: 'error', message: String(res?.message || '下载更新失败') });
@@ -542,6 +607,22 @@ export default function App() {
       window.open(updateState.releaseUrl, '_blank', 'noopener,noreferrer');
     }
   }, [updateState]);
+
+  useEffect(() => {
+    return () => {
+      if (downloadProgressOffRef.current) {
+        downloadProgressOffRef.current();
+        downloadProgressOffRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!import.meta.env.PROD) return;
+    if (startupUpdateRanRef.current) return;
+    startupUpdateRanRef.current = true;
+    checkForUpdatesWithSource('startup');
+  }, [checkForUpdatesWithSource]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -1551,7 +1632,7 @@ export default function App() {
       {updateOpen && (
         <div
           className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-6 z-[60]"
-          onClick={() => setUpdateOpen(false)}
+          onClick={cancelStartupUpdateCheck}
         >
           <div
             className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6"
@@ -1561,7 +1642,7 @@ export default function App() {
               <h3 className="text-lg font-bold dark:text-white">检查更新</h3>
               <button
                 type="button"
-                onClick={() => setUpdateOpen(false)}
+                onClick={cancelStartupUpdateCheck}
                 className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"
               >
                 <X className="w-5 h-5" />
@@ -1583,15 +1664,43 @@ export default function App() {
               {updateState.step === 'idle' && '点击“检查更新”后会在此显示结果。'}
             </div>
 
+            {updateState.step === 'downloading' && (
+              <div className="mt-4 space-y-2">
+                <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-600 transition-all"
+                    style={{ width: `${Math.max(0, Math.min(100, updateState.percent || 0))}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                  <div>{Math.round(updateState.percent || 0)}%</div>
+                  <div>
+                    {updateState.total > 0
+                      ? `${(updateState.transferred / 1024 / 1024).toFixed(1)} / ${(updateState.total / 1024 / 1024).toFixed(1)} MB`
+                      : `${(updateState.transferred / 1024 / 1024).toFixed(1)} MB`}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="mt-6 flex justify-end gap-3">
               {updateState.step === 'available' && (
-                <button
-                  type="button"
-                  onClick={startDownloadAndInstall}
-                  className="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all"
-                >
-                  更新
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={cancelStartupUpdateCheck}
+                    className="px-5 py-2 border dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors dark:text-white"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startDownloadAndInstall}
+                    className="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all"
+                  >
+                    更新
+                  </button>
+                </>
               )}
               {updateState.step === 'downloaded' && (
                 <button
@@ -1603,23 +1712,33 @@ export default function App() {
                 </button>
               )}
               {updateState.step === 'checking' || updateState.step === 'downloading' ? (
+                updateState.step === 'checking' && updateSource === 'startup' ? (
+                  <button
+                    type="button"
+                    onClick={cancelStartupUpdateCheck}
+                    className="px-5 py-2 border dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors dark:text-white"
+                  >
+                    取消
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="px-5 py-2 border dark:border-slate-700 rounded-xl opacity-60 cursor-not-allowed dark:text-white"
+                    disabled
+                  >
+                    请稍候
+                  </button>
+                )
+              ) : updateState.step === 'available' ? null : (
                 <button
                   type="button"
-                  className="px-5 py-2 border dark:border-slate-700 rounded-xl opacity-60 cursor-not-allowed dark:text-white"
-                  disabled
-                >
-                  请稍候
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setUpdateOpen(false)}
+                  onClick={cancelStartupUpdateCheck}
                   className="px-5 py-2 border dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors dark:text-white"
                 >
                   关闭
                 </button>
               )}
-              {updateState.step !== 'checking' && updateState.step !== 'downloading' && (
+              {updateSource === 'manual' && updateState.step !== 'checking' && updateState.step !== 'downloading' && (
                 <button
                   type="button"
                   onClick={checkForUpdates}

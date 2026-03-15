@@ -19,5 +19,13 @@ contextBridge.exposeInMainWorld('appUpdate', {
   getVersion: () => ipcRenderer.invoke('app:getVersion'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   downloadUpdate: () => ipcRenderer.invoke('update:download'),
-  quitAndInstall: () => ipcRenderer.invoke('update:quitAndInstall')
+  quitAndInstall: () => ipcRenderer.invoke('update:quitAndInstall'),
+  onDownloadProgress: (listener) => {
+    if (typeof listener !== 'function') return () => {};
+    const handler = (_event, info) => listener(info || {});
+    ipcRenderer.on('update:downloadProgress', handler);
+    return () => {
+      ipcRenderer.removeListener('update:downloadProgress', handler);
+    };
+  }
 });

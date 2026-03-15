@@ -14,6 +14,9 @@ declare global {
         | { status: 'error'; message: string }
       >;
       quitAndInstall: () => Promise<void> | void;
+      onDownloadProgress?: (
+        listener: (info: { percent?: number; transferred?: number; total?: number; bytesPerSecond?: number }) => void
+      ) => () => void;
     };
   }
 }

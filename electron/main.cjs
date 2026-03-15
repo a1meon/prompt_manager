@@ -1,9 +1,7 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 let mainWindow = null;
 let splashWindow = null;
-let updateCheckStarted = false;
-let updateFlowOwner = null;
 
 app.setName('一世提示词管理');
 
@@ -153,96 +151,6 @@ function getDialogParent() {
   return null;
 }
 
-async function startUpdateCheck() {
-  if (!app.isPackaged) return;
-  if (updateCheckStarted) return;
-  updateCheckStarted = true;
-
-  let autoUpdater;
-  try {
-    ({ autoUpdater } = require('electron-updater'));
-  } catch {
-    return;
-  }
-
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
-
-  const token =
-    process.env.PROMPT_MANAGER_GH_TOKEN ||
-    process.env.GH_TOKEN ||
-    process.env.GITHUB_TOKEN;
-  if (token && typeof token === 'string') {
-    autoUpdater.requestHeaders = {
-      Authorization: `token ${token}`
-    };
-  }
-
-  autoUpdater.on('update-available', async (info) => {
-    if (updateFlowOwner && updateFlowOwner !== 'startup') return;
-    updateFlowOwner = 'startup';
-    const parent = getDialogParent();
-    const result = await dialog.showMessageBox(parent ?? undefined, {
-      type: 'info',
-      buttons: ['下载更新', '稍后'],
-      defaultId: 0,
-      cancelId: 1,
-      title: '发现新版本',
-      message: `发现新版本 ${info?.version || ''}，是否立即下载？`
-    });
-    if (result.response === 0) {
-      try {
-        await autoUpdater.downloadUpdate();
-      } catch (err) {
-        console.error('[autoUpdater] download failed', err);
-      }
-    }
-  });
-
-  autoUpdater.on('update-downloaded', async () => {
-    if (updateFlowOwner && updateFlowOwner !== 'startup') return;
-    updateFlowOwner = 'startup';
-    const parent = getDialogParent();
-    const result = await dialog.showMessageBox(parent ?? undefined, {
-      type: 'info',
-      buttons: ['立即安装', '稍后'],
-      defaultId: 0,
-      cancelId: 1,
-      title: '发现新版本',
-      message: '新版本已下载完成，是否立即安装？',
-      detail: '立即安装会关闭应用并启动安装程序。'
-    });
-    if (result.response === 0) {
-      autoUpdater.quitAndInstall(false, true);
-    }
-  });
-
-  autoUpdater.on('error', (err) => {
-    console.error('[autoUpdater] error', err);
-    const message = String(err?.message || err || '');
-    const isAuthRelated =
-      /status code:\s*(401|403|404)/i.test(message) ||
-      /unauthorized|forbidden|not\s+found/i.test(message);
-    if (isAuthRelated) {
-      dialog.showMessageBox(getDialogParent() ?? undefined, {
-        type: 'warning',
-        buttons: ['知道了'],
-        defaultId: 0,
-        title: '无法检查更新',
-        message: '当前更新源不可访问（可能是私有仓库权限导致）。',
-        detail: '请为应用进程配置环境变量 PROMPT_MANAGER_GH_TOKEN（或 GH_TOKEN）后重启应用。'
-      });
-    }
-  });
-
-  try {
-    updateFlowOwner = 'startup';
-    await autoUpdater.checkForUpdates();
-  } catch (err) {
-    console.error('[autoUpdater] checkForUpdates failed', err);
-  }
-}
-
 app.whenReady().then(() => {
   ipcMain.handle('app:getVersion', () => app.getVersion());
 
@@ -266,8 +174,8 @@ app.whenReady().then(() => {
       };
     }
 
-    updateFlowOwner = 'ipc';
     autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = true;
     try {
       const result = await autoUpdater.checkForUpdates();
       if (!result || !result.updateInfo || !result.updateInfo.version) return { status: 'no_update' };
@@ -279,12 +187,10 @@ app.whenReady().then(() => {
       };
     } catch (err) {
       return { status: 'error', message: String(err?.message || err || '') };
-    } finally {
-      updateFlowOwner = null;
     }
   });
 
-  ipcMain.handle('update:download', async () => {
+  ipcMain.handle('update:download', async (event) => {
     if (!app.isPackaged) return { status: 'error', message: '开发模式不支持自动更新下载' };
     let autoUpdater;
     try {
@@ -292,14 +198,41 @@ app.whenReady().then(() => {
     } catch {
       return { status: 'error', message: '更新模块未就绪' };
     }
-    updateFlowOwner = 'ipc';
+    const token =
+      process.env.PROMPT_MANAGER_GH_TOKEN ||
+      process.env.GH_TOKEN ||
+      process.env.GITHUB_TOKEN;
+    if (token && typeof token === 'string') {
+      autoUpdater.requestHeaders = {
+        Authorization: `token ${token}`
+      };
+    }
+
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    const wc = event.sender;
+    let lastSentAt = 0;
+    const onProgress = (info) => {
+      const now = Date.now();
+      if (now - lastSentAt < 200 && Number(info?.percent || 0) < 100) return;
+      lastSentAt = now;
+      wc.send('update:downloadProgress', {
+        percent: Number(info?.percent || 0),
+        transferred: Number(info?.transferred || 0),
+        total: Number(info?.total || 0),
+        bytesPerSecond: Number(info?.bytesPerSecond || 0)
+      });
+    };
+
+    autoUpdater.on('download-progress', onProgress);
     try {
       await autoUpdater.downloadUpdate();
       return { status: 'downloaded' };
     } catch (err) {
       return { status: 'error', message: String(err?.message || err || '') };
     } finally {
-      updateFlowOwner = null;
+      autoUpdater.removeListener('download-progress', onProgress);
     }
   });
 
@@ -343,7 +276,6 @@ app.whenReady().then(() => {
   }
 
   mainWindow = createMainWindow();
-  startUpdateCheck();
   app.on('activate', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -355,7 +287,6 @@ app.whenReady().then(() => {
       splashWindow = createSplashWindow();
     }
     mainWindow = createMainWindow();
-    startUpdateCheck();
   });
 });
 

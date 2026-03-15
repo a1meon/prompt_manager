@@ -1,7 +1,7 @@
 {
   "name": "prompt-manager",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "提示词模板管理与批量生成桌面应用",
   "author": "a1meon",
   "type": "module",
