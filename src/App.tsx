@@ -18,7 +18,8 @@ import {
   RefreshCw,
   Info,
   HelpCircle,
-  ChevronDown
+  ChevronDown,
+  ScrollText
 } from 'lucide-react';
 import { Template, ActiveTab, TemplateGroup, SidebarOrderItem } from './types';
 import { DEFAULT_TEMPLATES, STORAGE_KEY, TEMPLATE_VARIABLES_STORAGE_KEY, THEME_STORAGE_KEY } from './constants';
@@ -28,6 +29,7 @@ import { EmptyState } from './components/EmptyState';
 import { VariablesForm } from './components/VariablesForm';
 import { MarkdownEditor } from './components/MarkdownEditor';
 import { MarkdownViewer } from './components/MarkdownViewer';
+import changelogRaw from '../CHANGELOG.md?raw';
 
 const VARIABLE_TOKEN_REGEX = /\{([^{}]+)\}/g;
 const VARIABLE_COLOR_COUNT = 8;
@@ -116,6 +118,71 @@ function buildHighlightedHtml(text: string) {
   }
 
   return pieces.join('');
+}
+
+type ChangelogSection = {
+  title: string;
+  items: string[];
+};
+
+type ChangelogRelease = {
+  version: string;
+  date?: string;
+  sections: ChangelogSection[];
+};
+
+function parseChangelog(raw: string): ChangelogRelease[] {
+  const lines = String(raw || '').replace(/\r/g, '').split('\n');
+  const releases: ChangelogRelease[] = [];
+  let currentRelease: ChangelogRelease | null = null;
+  let currentSection: ChangelogSection | null = null;
+
+  const pushSection = () => {
+    if (!currentRelease || !currentSection) return;
+    if (currentSection.items.length === 0) return;
+    currentRelease.sections.push(currentSection);
+    currentSection = null;
+  };
+
+  const pushRelease = () => {
+    if (!currentRelease) return;
+    pushSection();
+    releases.push(currentRelease);
+    currentRelease = null;
+  };
+
+  for (const line of lines) {
+    const h2 = line.match(/^##\s+\[(.+?)\](?:\s*-\s*(.+))?\s*$/);
+    if (h2) {
+      pushRelease();
+      currentRelease = {
+        version: String(h2[1] || '').trim(),
+        date: String(h2[2] || '').trim() || undefined,
+        sections: []
+      };
+      continue;
+    }
+
+    const h3 = line.match(/^###\s+(.+?)\s*$/);
+    if (h3) {
+      pushSection();
+      if (!currentRelease) continue;
+      currentSection = { title: String(h3[1] || '').trim(), items: [] };
+      continue;
+    }
+
+    const li = line.match(/^\s*-\s+(.*)$/);
+    if (li) {
+      if (!currentRelease) continue;
+      if (!currentSection) currentSection = { title: '', items: [] };
+      const item = String(li[1] || '').trim();
+      if (item) currentSection.items.push(item);
+      continue;
+    }
+  }
+
+  pushRelease();
+  return releases.filter(r => Boolean(r.version));
 }
 
 function getSelectionOffsetsWithin(root: HTMLElement) {
@@ -394,6 +461,7 @@ export default function App() {
   const [editorCreateGroupName, setEditorCreateGroupName] = useState('');
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [changelogOpen, setChangelogOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [updateSource, setUpdateSource] = useState<'manual' | 'startup'>('manual');
   const [updateState, setUpdateState] = useState<
@@ -426,6 +494,7 @@ export default function App() {
     () => variablesByTemplateId[activeTemplateId] || {},
     [variablesByTemplateId, activeTemplateId]
   );
+  const changelogReleases = useMemo(() => parseChangelog(changelogRaw), [changelogRaw]);
 
   // --- Theme Initialization ---
   useEffect(() => {
@@ -1129,6 +1198,17 @@ export default function App() {
                   className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
                   onClick={() => {
                     setHelpMenuOpen(false);
+                    setChangelogOpen(true);
+                  }}
+                >
+                  <ScrollText className="w-4 h-4 text-slate-500" />
+                  更新日志
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
+                  onClick={() => {
+                    setHelpMenuOpen(false);
                     setAboutOpen(true);
                   }}
                 >
@@ -1747,6 +1827,85 @@ export default function App() {
                   重新检查
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {changelogOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-6 z-[60]"
+          onClick={() => setChangelogOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 flex flex-col max-h-[80vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ScrollText className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-lg font-bold dark:text-white">更新日志</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChangelogOpen(false)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 flex-1 min-h-0 overflow-y-auto beautify-scrollbar pr-1 space-y-4">
+              {changelogReleases.map((rel) => (
+                <div
+                  key={`${rel.version}-${rel.date || ''}`}
+                  className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/40 p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-600 text-white shrink-0">
+                        {rel.version === 'Unreleased' ? '未发布' : `v${rel.version}`}
+                      </span>
+                      {rel.date && (
+                        <span className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                          {rel.date}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {rel.sections.map((sec, idx) => (
+                      <div
+                        key={`${sec.title || 'misc'}-${idx}`}
+                        className="rounded-lg border border-slate-200/60 dark:border-slate-800 bg-white/80 dark:bg-slate-900/40 p-3"
+                      >
+                        <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                          {sec.title || '其他'}
+                        </div>
+                        <ul className="mt-2 space-y-1.5">
+                          {sec.items.map((it, i) => (
+                            <li key={`${i}-${it}`} className="flex gap-2 text-sm text-slate-600 dark:text-slate-200">
+                              <span className="mt-2 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0" />
+                              <span className="leading-relaxed">{it}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setChangelogOpen(false)}
+                className="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all"
+              >
+                知道了
+              </button>
             </div>
           </div>
         </div>

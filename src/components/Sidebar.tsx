@@ -342,7 +342,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }}
                   onClick={() => toggleGroup(group.id)}
                   className={cn(
-                    "group flex items-center justify-between gap-2 px-3 py-2 cursor-grab active:cursor-grabbing select-none",
+                    "group flex items-center justify-between gap-2 px-3 py-2 cursor-pointer select-none",
                     "hover:bg-slate-50 dark:hover:bg-slate-800/60",
                     dragOverId === `group-${group.id}` && dragging?.type === 'group' && dragging.id !== group.id && "ring-2 ring-indigo-400/40"
                   )}
