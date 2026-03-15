@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { AlertCircle, GripVertical } from 'lucide-react';
+import { AlertCircle, GripVertical, Info } from 'lucide-react';
 
 interface VariableInputProps {
   name: string;
@@ -43,7 +43,7 @@ export const BatchInputGuide: React.FC<BatchInputGuideProps> = ({ variables }) =
       <ul className="list-disc list-inside space-y-0.5 opacity-80">
         <li>每行代表一组变量值</li>
         <li>多个变量用逗号 (中/英) 或制表符分隔</li>
-        <li>当前顺序：{variables.join(' → ')}</li>
+        {variables.length > 0 && <li>按下方变量顺序填写</li>}
       </ul>
     </div>
   );
@@ -73,6 +73,7 @@ export const VariablesForm: React.FC<VariablesFormProps> = ({
 }) => {
   const [draggingName, setDraggingName] = useState<string | null>(null);
   const [dragOverName, setDragOverName] = useState<string | null>(null);
+  const [batchGuideOpen, setBatchGuideOpen] = useState(false);
 
   const reorder = useCallback((from: string, to: string) => {
     if (!onReorderVariables) return;
@@ -155,51 +156,83 @@ export const VariablesForm: React.FC<VariablesFormProps> = ({
 
   return (
     <div className="space-y-3">
-      <BatchInputGuide variables={variables} />
-      {variables.length > 1 && onReorderVariables && (
-        <div className="space-y-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-2">
-          {variables.map(v => (
-            <div
-              key={v}
-              className={[
-                "flex items-center gap-2 rounded-md px-2 py-1 text-xs text-slate-600 dark:text-slate-300",
-                draggingName === v ? "opacity-60" : "",
-                dragOverName === v && draggingName !== v ? "ring-2 ring-indigo-400/40" : ""
-              ].join(' ')}
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (dragOverName !== v) setDragOverName(v);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                const from = e.dataTransfer.getData('text/plain') || draggingName;
-                if (!from) return;
-                reorder(from, v);
-                setDraggingName(null);
-                setDragOverName(null);
-              }}
-            >
-              <span
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.effectAllowed = 'move';
-                  e.dataTransfer.setData('text/plain', v);
-                  setDraggingName(v);
-                }}
-                onDragEnd={() => {
-                  setDraggingName(null);
-                  setDragOverName(null);
-                }}
-                className="cursor-grab text-slate-400"
-                title="拖动排序"
-              >
-                <GripVertical className="w-4 h-4" />
-              </span>
-              <span className="truncate">{v}</span>
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+          变量顺序
+        </div>
+        <div
+          className="relative"
+          onMouseEnter={() => setBatchGuideOpen(true)}
+          onMouseLeave={() => setBatchGuideOpen(false)}
+        >
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+          >
+            <Info className="w-3.5 h-3.5" />
+            批量输入规范
+          </button>
+          {batchGuideOpen && (
+            <div className="absolute right-0 top-full mt-2 w-64 z-50">
+              <div className="absolute -top-1 right-4 h-2 w-2 rotate-45 bg-amber-50 dark:bg-amber-900/20 border-l border-t border-amber-100 dark:border-amber-800/50" />
+              <BatchInputGuide variables={variables} />
             </div>
-          ))}
+          )}
+        </div>
+      </div>
+
+      {variables.length > 0 && (
+        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-2">
+          <div className="-mx-1 px-1 overflow-x-auto">
+            <div className="flex gap-2 whitespace-nowrap">
+              {variables.map(v => (
+                <div
+                  key={v}
+                  className={[
+                    "rounded-md",
+                    draggingName === v ? "opacity-60" : "",
+                    dragOverName === v && draggingName !== v ? "ring-2 ring-indigo-400/40" : ""
+                  ].join(' ')}
+                  onDragOver={(e) => {
+                    if (!onReorderVariables) return;
+                    e.preventDefault();
+                    if (dragOverName !== v) setDragOverName(v);
+                  }}
+                  onDrop={(e) => {
+                    if (!onReorderVariables) return;
+                    e.preventDefault();
+                    const from = e.dataTransfer.getData('text/plain') || draggingName;
+                    if (!from) return;
+                    reorder(from, v);
+                    setDraggingName(null);
+                    setDragOverName(null);
+                  }}
+                >
+                  <div
+                    draggable={!!onReorderVariables}
+                    onDragStart={(e) => {
+                      if (!onReorderVariables) return;
+                      e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setData('text/plain', v);
+                      setDraggingName(v);
+                    }}
+                    onDragEnd={() => {
+                      setDraggingName(null);
+                      setDragOverName(null);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/40 text-xs text-slate-600 dark:text-slate-200 select-none cursor-grab active:cursor-grabbing"
+                    title={onReorderVariables ? '拖动排序' : undefined}
+                  >
+                    {onReorderVariables && <GripVertical className="w-3.5 h-3.5 text-slate-400" />}
+                    <span className="max-w-40 truncate">{v}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
+
       <textarea 
         className="w-full h-52 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all dark:text-white beautify-scrollbar"
         placeholder={`例：${variables.map(() => '值').join(', ')}`}

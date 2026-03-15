@@ -11,6 +11,7 @@
 - 导入导出：导入/导出模板 JSON；在编辑模板时导入 Markdown 文本作为模板内容
 - 复制能力：复制结果（单条）与全量复制（批量）
 - 主题切换：浅色/深色主题
+- 自动更新：启动时检查 GitHub Releases，新版本可下载并一键安装（安装版）
 
 ## 技术栈
 
@@ -63,6 +64,12 @@ npm run pack:installer
 npm run pack:exe
 ```
 
+## 自动更新说明
+
+- 自动更新仅在打包后的应用中启用（开发模式不会检查更新）
+- 更新源为 GitHub Releases（见 `package.json` 中 `build.publish` 配置）
+- 发布新版本时需按版本号打包并上传 Release 产物
+
 ## 文档
 
 - 使用手册：见 [USER_MANUAL.md](./USER_MANUAL.md)
@@ -82,4 +89,3 @@ npm run pack:exe
 
 - 不要在仓库中提交任何密钥、Token 或个人敏感信息
 - `.env*` 已默认忽略；如需配置本地环境变量，请使用 `.env.local` 等本地文件
-

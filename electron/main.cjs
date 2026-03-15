@@ -1,7 +1,8 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 let mainWindow = null;
 let splashWindow = null;
+let updateCheckStarted = false;
 
 app.setName('一世提示词管理');
 
@@ -145,6 +146,54 @@ function createMainWindow() {
   return win;
 }
 
+function getDialogParent() {
+  if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
+  if (splashWindow && !splashWindow.isDestroyed()) return splashWindow;
+  return null;
+}
+
+async function startUpdateCheck() {
+  if (!app.isPackaged) return;
+  if (updateCheckStarted) return;
+  updateCheckStarted = true;
+
+  let autoUpdater;
+  try {
+    ({ autoUpdater } = require('electron-updater'));
+  } catch {
+    return;
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-downloaded', async () => {
+    const parent = getDialogParent();
+    const result = await dialog.showMessageBox(parent ?? undefined, {
+      type: 'info',
+      buttons: ['立即安装', '稍后'],
+      defaultId: 0,
+      cancelId: 1,
+      title: '发现新版本',
+      message: '新版本已下载完成，是否立即安装？',
+      detail: '立即安装会关闭应用并启动安装程序。'
+    });
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall(false, true);
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[autoUpdater] error', err);
+  });
+
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (err) {
+    console.error('[autoUpdater] checkForUpdates failed', err);
+  }
+}
+
 app.whenReady().then(() => {
   ipcMain.handle('window:minimize', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -176,6 +225,7 @@ app.whenReady().then(() => {
   }
 
   mainWindow = createMainWindow();
+  startUpdateCheck();
   app.on('activate', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -187,6 +237,7 @@ app.whenReady().then(() => {
       splashWindow = createSplashWindow();
     }
     mainWindow = createMainWindow();
+    startUpdateCheck();
   });
 });
 

@@ -86,7 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
       
       <div
-        className="flex-1 overflow-y-auto beautify-scrollbar p-2 space-y-1"
+        className="flex-1 overflow-y-auto beautify-scrollbar p-2 space-y-2 bg-slate-50 dark:bg-slate-950"
         onDragOver={(e) => {
           if (!draggingId) return;
           e.preventDefault();
@@ -131,18 +131,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }}
             onClick={() => onTemplateSelect(t.id)}
             className={cn(
-              "group relative p-3 rounded-lg transition-all select-none cursor-grab active:cursor-grabbing",
+              "group relative p-3 rounded-xl transition-all select-none cursor-grab active:cursor-grabbing border shadow-sm",
               draggingId === t.id && "opacity-60",
               dragOverId === t.id && draggingId !== t.id && "ring-2 ring-indigo-400/50",
               activeTemplateId === t.id 
-                ? "bg-indigo-600 text-white shadow-md" 
-                : "hover:bg-slate-100 dark:hover:bg-slate-800"
+                ? "bg-indigo-50 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-400/20 shadow-md before:content-[''] before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r before:bg-indigo-500"
+                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md"
             )}
           >
-            <div className="font-medium truncate pr-6">{t.name}</div>
+            <div className={cn(
+              "font-medium truncate pr-6",
+              activeTemplateId === t.id ? "text-slate-900 dark:text-white" : "text-slate-900 dark:text-slate-100"
+            )}>{t.name}</div>
             <div className={cn(
               "text-xs truncate",
-              activeTemplateId === t.id ? "text-indigo-100" : "text-slate-500 dark:text-slate-400"
+              activeTemplateId === t.id ? "text-slate-600 dark:text-slate-300" : "text-slate-500 dark:text-slate-400"
             )}>
               {t.description || '无备注说明'}
             </div>
@@ -151,7 +154,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={(e) => { e.stopPropagation(); onPreviewRaw(t.id); }}
                 className={cn(
                   "p-1 rounded",
-                  activeTemplateId === t.id ? "hover:bg-indigo-500" : "hover:bg-slate-200 dark:hover:bg-slate-700"
+                  activeTemplateId === t.id ? "hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300" : "hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300"
                 )}
                 title="查看原始内容"
               >
@@ -161,7 +164,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={(e) => { e.stopPropagation(); onEditTemplate(t); }}
                 className={cn(
                   "p-1 rounded",
-                  activeTemplateId === t.id ? "hover:bg-indigo-500" : "hover:bg-slate-200 dark:hover:bg-slate-700"
+                  activeTemplateId === t.id ? "hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300" : "hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300"
                 )}
                 title="修改模板"
               >
@@ -171,7 +174,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={(e) => { e.stopPropagation(); onDeleteTemplate(t.id); }}
                 className={cn(
                   "p-1 rounded",
-                  activeTemplateId === t.id ? "hover:bg-indigo-500 text-white" : "hover:bg-slate-200 dark:hover:bg-slate-700 text-red-500"
+                  activeTemplateId === t.id ? "hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-red-600 dark:text-red-400" : "hover:bg-slate-200 dark:hover:bg-slate-700 text-red-500"
                 )}
                 title="删除模板"
               >

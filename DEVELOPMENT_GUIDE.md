@@ -3,8 +3,8 @@
 ## 🚀 快速开始
 
 ### 环境要求
-- Node.js >= 16.x
-- npm >= 8.x
+- Node.js >= 18.x
+- npm >= 9.x
 
 ### 安装依赖
 ```bash
@@ -187,6 +187,28 @@ import { copyToClipboard } from './utils';
 
 await copyToClipboard('要复制的文本');
 ```
+
+---
+
+## 🧩 自动更新（GitHub Releases）
+
+项目使用 `electron-updater` 对接 GitHub Releases，应用启动时会检查更新并自动下载，下载完成后提示用户一键安装。
+
+### 工作原理
+
+- `package.json` 的 `build.publish` 指定 GitHub 仓库（owner/repo）
+- 应用打包后会生成更新元数据文件并用于更新检查
+- 仅在 `app.isPackaged` 时启用更新检查（开发模式不检查）
+
+### 发布流程（建议）
+
+1. 修改版本号：更新 `package.json` 的 `version`
+2. 更新更新记录：完善 `CHANGELOG.md`
+3. 产物清理并打包：
+   - `npm run clean:pack`
+   - `npm run pack:installer`
+4. 在 GitHub 创建 Release（建议 tag 为 `vX.Y.Z`），上传打包产物
+5. 安装版用户下次启动会自动拉取新版本并提示安装
 
 ---
 

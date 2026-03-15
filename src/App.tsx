@@ -766,10 +766,10 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 flex gap-6">
+              <div className="flex-1 min-h-0 overflow-hidden p-6 flex gap-6">
               {/* Left: Configuration */}
-              <div className="w-1/2 flex flex-col gap-6">
-                <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border dark:border-slate-800 shadow-sm h-[360px] flex flex-col">
+              <div className="w-1/2 flex flex-col gap-6 min-h-0">
+                <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border dark:border-slate-800 shadow-sm flex flex-col flex-1 min-h-0">
                   <h3 className="font-medium mb-4 flex items-center gap-2 text-slate-700 dark:text-slate-300">
                     <Edit2 className="w-4 h-4" /> 变量配置
                   </h3>
@@ -797,7 +797,7 @@ export default function App() {
                   </div>
                 </div>
             
-                <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border dark:border-slate-800 shadow-sm h-[360px] flex flex-col">
+                <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border dark:border-slate-800 shadow-sm flex flex-col flex-1 min-h-0">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-medium flex items-center gap-2 text-slate-700 dark:text-slate-300">
                       <FileText className="w-4 h-4" /> 模板内容预览
@@ -832,7 +832,7 @@ export default function App() {
               </div>
 
               {/* Right: Results */}
-              <div className="w-1/2 flex flex-col gap-6">
+              <div className="w-1/2 flex flex-col gap-6 min-h-0">
                 <div className="bg-slate-900 dark:bg-slate-800 rounded-xl shadow-xl flex flex-col flex-1 overflow-hidden">
                   <div className="p-4 border-b border-slate-800 dark:border-slate-700 flex items-center justify-between">
                     <h3 className="text-white font-medium flex items-center gap-2">

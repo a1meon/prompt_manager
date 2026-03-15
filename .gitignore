@@ -1,6 +1,7 @@
 node_modules/
 dist/
 release/
+release-*/
 .cache/
 .vite/
 
@@ -27,5 +28,7 @@ Thumbs.db
 *.dmg
 *.pkg
 *.AppImage
+*.blockmap
+*.7z
 
 extracted-icon.ico
