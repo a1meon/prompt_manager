@@ -1654,14 +1654,10 @@ export default function App() {
             </div>
             <div className="mt-3 text-sm text-slate-600 dark:text-slate-200 space-y-2">
               <div className="font-semibold text-slate-900 dark:text-white">一世提示词管理 v{__APP_VERSION__}</div>
-              <div>用于沉淀与管理提示词模板：支持变量识别、单条/批量生成、复制以及导入导出，帮助将提示词生产流程标准化、可复用、可追溯。</div>
-              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3 text-xs space-y-1">
-                <div>• 模板分组与拖拽排序</div>
-                <div>• 批量生成变量顺序拖拽与规范提示</div>
-                <div>• GitHub Releases 更新检查与安装（安装版）</div>
-              </div>
+              <div>用于团队沉淀与管理提示词模板：支持变量识别、单条/批量生成、复制以及导入导出，帮助将提示词生产流程标准化、可复用、可追溯。</div>
+              
               <div className="text-xs text-slate-500 dark:text-slate-400">
-                如有问题请联系微信：a1meon
+                有问题请联系微信：a1meon
               </div>
             </div>
             <div className="mt-6 flex justify-end">
