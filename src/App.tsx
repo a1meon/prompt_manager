@@ -16,9 +16,11 @@ import {
   Settings2,
   PlusCircle,
   RefreshCw,
-  Info
+  Info,
+  HelpCircle,
+  ChevronDown
 } from 'lucide-react';
-import { Template, ActiveTab } from './types';
+import { Template, ActiveTab, TemplateGroup, SidebarOrderItem } from './types';
 import { DEFAULT_TEMPLATES, STORAGE_KEY, TEMPLATE_VARIABLES_STORAGE_KEY, THEME_STORAGE_KEY } from './constants';
 import { cn, extractVariables, generatePrompt, copyToClipboard, markdownToPlainText } from './utils';
 import { Sidebar } from './components/Sidebar';
@@ -368,9 +370,12 @@ function VariableEditor({ value, onChange, placeholder, className, disabled }: V
 export default function App() {
   // --- State ---
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [templateGroups, setTemplateGroups] = useState<TemplateGroup[]>([]);
+  const [sidebarOrder, setSidebarOrder] = useState<SidebarOrderItem[]>([]);
   const [activeTemplateId, setActiveTemplateId] = useState<string>('');
   const [isEditing, setIsEditing] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [editingGroupId, setEditingGroupId] = useState<string>('');
   const [variablesByTemplateId, setVariablesByTemplateId] = useState<Record<string, Record<string, string>>>({});
   const [batchInput, setBatchInput] = useState('');
   const [activeTab, setActiveTab] = useState<ActiveTab>('single');
@@ -384,6 +389,24 @@ export default function App() {
   const [rawPreviewShowSource, setRawPreviewShowSource] = useState(false);
   const [importHintPinned, setImportHintPinned] = useState(false);
   const [importHintHover, setImportHintHover] = useState(false);
+  const [editorGroupPickerOpen, setEditorGroupPickerOpen] = useState(false);
+  const [editorCreateGroupOpen, setEditorCreateGroupOpen] = useState(false);
+  const [editorCreateGroupName, setEditorCreateGroupName] = useState('');
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const [updateState, setUpdateState] = useState<
+    | { step: 'idle' }
+    | { step: 'checking' }
+    | { step: 'none'; currentVersion: string }
+    | { step: 'available'; currentVersion: string; latestVersion: string; releaseUrl?: string }
+    | { step: 'downloading'; latestVersion: string }
+    | { step: 'downloaded'; latestVersion: string }
+    | { step: 'error'; message: string }
+  >({ step: 'idle' });
+
+  const helpMenuRef = useRef<HTMLDivElement | null>(null);
+  const editorGroupPickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const api = window.appWindow;
@@ -422,22 +445,212 @@ export default function App() {
 
   const toggleTheme = () => setIsDark(!isDark);
 
+  const createGroupWithName = useCallback((name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return '';
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    setTemplateGroups(prev => [{ id, name: trimmed, templateIds: [], collapsed: false }, ...prev]);
+    setSidebarOrder(prev => [{ type: 'group' as const, id }, ...prev]);
+    return id;
+  }, []);
+
+  useEffect(() => {
+    if (isEditing) return;
+    setEditorGroupPickerOpen(false);
+    setEditorCreateGroupOpen(false);
+    setEditorCreateGroupName('');
+  }, [isEditing]);
+
+  const compareSemver = useCallback((a: string, b: string) => {
+    const pa = String(a).replace(/^v/i, '').split('.').map(n => Number(n || 0));
+    const pb = String(b).replace(/^v/i, '').split('.').map(n => Number(n || 0));
+    const len = Math.max(pa.length, pb.length);
+    for (let i = 0; i < len; i++) {
+      const da = pa[i] ?? 0;
+      const db = pb[i] ?? 0;
+      if (da > db) return 1;
+      if (da < db) return -1;
+    }
+    return 0;
+  }, []);
+
+  const checkForUpdates = useCallback(async () => {
+    setUpdateOpen(true);
+    setUpdateState({ step: 'checking' });
+
+    const currentVersion = __APP_VERSION__;
+
+    if (window.appUpdate?.checkForUpdates) {
+      const result: any = await Promise.resolve(window.appUpdate.checkForUpdates()).catch((err: any) => ({
+        status: 'error',
+        message: String(err?.message || err || '')
+      }));
+      if (result.status === 'no_update') {
+        setUpdateState({ step: 'none', currentVersion });
+        return;
+      }
+      if (result.status === 'update_available') {
+        const latest = String(result.version || '');
+        if (compareSemver(latest, currentVersion) <= 0) {
+          setUpdateState({ step: 'none', currentVersion });
+          return;
+        }
+        setUpdateState({
+          step: 'available',
+          currentVersion,
+          latestVersion: latest
+        });
+        return;
+      }
+      setUpdateState({ step: 'error', message: String(result?.message || '检查更新失败') });
+      return;
+    }
+
+    try {
+      const res = await fetch('https://api.github.com/repos/a1meon/prompt_manager_release/releases/latest');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const tag = String(data?.tag_name || '').replace(/^v/i, '');
+      const url = String(data?.html_url || '');
+      if (!tag) throw new Error('无法解析版本号');
+      if (compareSemver(tag, currentVersion) <= 0) {
+        setUpdateState({ step: 'none', currentVersion });
+        return;
+      }
+      setUpdateState({ step: 'available', currentVersion, latestVersion: tag, releaseUrl: url });
+    } catch (err) {
+      setUpdateState({ step: 'error', message: String((err as any)?.message || err || '') });
+    }
+  }, [compareSemver]);
+
+  const startDownloadAndInstall = useCallback(async () => {
+    if (updateState.step !== 'available') return;
+    if (window.appUpdate?.downloadUpdate) {
+      setUpdateState({ step: 'downloading', latestVersion: updateState.latestVersion });
+      const res: any = await Promise.resolve(window.appUpdate.downloadUpdate()).catch((err: any) => ({
+        status: 'error',
+        message: String(err?.message || err || '')
+      }));
+      if (res.status === 'downloaded') {
+        setUpdateState({ step: 'downloaded', latestVersion: updateState.latestVersion });
+        return;
+      }
+      setUpdateState({ step: 'error', message: String(res?.message || '下载更新失败') });
+      return;
+    }
+    if (updateState.releaseUrl) {
+      window.open(updateState.releaseUrl, '_blank', 'noopener,noreferrer');
+    }
+  }, [updateState]);
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      if (helpMenuOpen && helpMenuRef.current && target && helpMenuRef.current.contains(target)) return;
+      if (editorGroupPickerOpen && editorGroupPickerRef.current && target && editorGroupPickerRef.current.contains(target)) return;
+      setHelpMenuOpen(false);
+      setEditorGroupPickerOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setHelpMenuOpen(false);
+      setEditorGroupPickerOpen(false);
+    };
+    document.addEventListener('mousedown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
+  }, [helpMenuOpen, editorGroupPickerOpen]);
+
   // --- Data Initialization ---
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      const parsed = JSON.parse(saved);
-      setTemplates(parsed);
-      if (parsed.length > 0) setActiveTemplateId(parsed[0].id);
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setTemplates(parsed);
+          setTemplateGroups([]);
+          setSidebarOrder(parsed.map(t => ({ type: 'template', id: t.id })));
+          if (parsed.length > 0) setActiveTemplateId(parsed[0].id);
+          return;
+        }
+      } catch {
+      }
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.templates)) {
+          const nextTemplates: Template[] = parsed.templates;
+          const nextGroups: TemplateGroup[] = Array.isArray(parsed.groups) ? parsed.groups : [];
+          const rawOrder: SidebarOrderItem[] = Array.isArray(parsed.sidebarOrder) ? parsed.sidebarOrder : [];
+
+          const templateIdSet = new Set(nextTemplates.map(t => t.id));
+          const groupIdSet = new Set(nextGroups.map(g => g.id));
+
+          const cleanedGroups = nextGroups
+            .map(g => ({
+              ...g,
+              templateIds: Array.from(new Set((g.templateIds || []).filter(id => templateIdSet.has(id))))
+            }))
+            .filter(g => Boolean((g.name || '').trim()) && groupIdSet.has(g.id));
+
+          const groupedTemplateIds = new Set(cleanedGroups.flatMap(g => g.templateIds));
+          const cleanedOrder = rawOrder
+            .filter(item => {
+              if (!item || typeof item !== 'object') return false;
+              if (item.type === 'template') return templateIdSet.has(item.id) && !groupedTemplateIds.has(item.id);
+              if (item.type === 'group') return groupIdSet.has(item.id);
+              return false;
+            });
+
+          const orderedTemplateIds = new Set(
+            cleanedOrder.filter(i => i.type === 'template').map(i => i.id)
+          );
+          const missingRootTemplates = nextTemplates
+            .map(t => t.id)
+            .filter(id => !groupedTemplateIds.has(id) && !orderedTemplateIds.has(id))
+            .map(id => ({ type: 'template' as const, id }));
+
+          setTemplates(nextTemplates);
+          setTemplateGroups(cleanedGroups);
+          setSidebarOrder([...cleanedOrder, ...missingRootTemplates]);
+          if (nextTemplates.length > 0) setActiveTemplateId(nextTemplates[0].id);
+          return;
+        }
+      } catch {
+      }
+      localStorage.removeItem(STORAGE_KEY);
     } else {
       setTemplates(DEFAULT_TEMPLATES);
+      setTemplateGroups([]);
+      setSidebarOrder(DEFAULT_TEMPLATES.map(t => ({ type: 'template' as const, id: t.id })));
       setActiveTemplateId(DEFAULT_TEMPLATES[0].id);
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
-  }, [templates]);
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        templates,
+        groups: templateGroups,
+        sidebarOrder
+      })
+    );
+  }, [templates, templateGroups, sidebarOrder]);
+
+  useEffect(() => {
+    if (templates.length === 0) {
+      if (activeTemplateId) setActiveTemplateId('');
+      return;
+    }
+    if (!templates.some(t => t.id === activeTemplateId)) {
+      setActiveTemplateId(templates[0].id);
+    }
+  }, [templates, activeTemplateId]);
 
   useEffect(() => {
     const saved = localStorage.getItem(TEMPLATE_VARIABLES_STORAGE_KEY);
@@ -503,6 +716,7 @@ export default function App() {
     setImportHintPinned(false);
     setEditorShowSource(false);
     setEditingTemplate(newTemplate);
+    setEditingGroupId('');
     setIsEditing(true);
   };
 
@@ -510,17 +724,35 @@ export default function App() {
     setImportHintPinned(false);
     setEditorShowSource(false);
     setEditingTemplate({ ...template });
+    const group = templateGroups.find(g => (g.templateIds || []).includes(template.id));
+    setEditingGroupId(group?.id || '');
     setIsEditing(true);
   };
 
   const handleSaveTemplate = () => {
     if (!editingTemplate) return;
+    const targetGroupId = editingGroupId;
+    const templateId = editingTemplate.id;
     if (templates.find(t => t.id === editingTemplate.id)) {
       setTemplates(templates.map(t => t.id === editingTemplate.id ? editingTemplate : t));
     } else {
       setTemplates([...templates, editingTemplate]);
       setActiveTemplateId(editingTemplate.id);
     }
+    setTemplateGroups(prev => {
+      const removed = prev.map(g => ({ ...g, templateIds: (g.templateIds || []).filter(tid => tid !== templateId) }));
+      if (!targetGroupId) return removed;
+      const idx = removed.findIndex(g => g.id === targetGroupId);
+      if (idx < 0) return removed;
+      const ids = [...(removed[idx].templateIds || [])];
+      if (!ids.includes(templateId)) ids.push(templateId);
+      return removed.map((g, i) => (i === idx ? { ...g, templateIds: ids } : g));
+    });
+    setSidebarOrder(prev => {
+      const filtered = prev.filter(item => !(item.type === 'template' && item.id === templateId));
+      if (targetGroupId) return filtered;
+      return [...filtered, { type: 'template' as const, id: templateId }];
+    });
     setIsEditing(false);
     setEditingTemplate(null);
   };
@@ -528,6 +760,10 @@ export default function App() {
   const handleDeleteTemplate = (id: string) => {
     const filtered = templates.filter(t => t.id !== id);
     setTemplates(filtered);
+    setTemplateGroups(prev =>
+      prev.map(g => ({ ...g, templateIds: g.templateIds.filter(tid => tid !== id) }))
+    );
+    setSidebarOrder(prev => prev.filter(item => !(item.type === 'template' && item.id === id)));
     if (activeTemplateId === id) {
       setActiveTemplateId(filtered[0]?.id || '');
     }
@@ -602,7 +838,16 @@ export default function App() {
   }, [batchResults]);
 
   const handleExport = () => {
-    const dataStr = JSON.stringify(templates, null, 2);
+    const dataStr = JSON.stringify(
+      {
+        version: 2,
+        templates,
+        groups: templateGroups,
+        sidebarOrder
+      },
+      null,
+      2
+    );
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -618,9 +863,94 @@ export default function App() {
     reader.onload = (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
+        const ensureUniqueId = (taken: Set<string>, base: string) => {
+          let id = base;
+          while (taken.has(id)) id = `${base}-${Math.random().toString(16).slice(2, 8)}`;
+          taken.add(id);
+          return id;
+        };
+
         if (Array.isArray(parsed)) {
-          setTemplates(prev => [...prev, ...parsed]);
+          setTemplates(prev => {
+            const taken = new Set(prev.map(t => t.id));
+            const next = parsed
+              .filter(Boolean)
+              .map((t: Template) => ({ ...t, id: ensureUniqueId(taken, String(t.id || Date.now())) }));
+            setSidebarOrder(orderPrev => [
+              ...orderPrev,
+              ...next.map(t => ({ type: 'template' as const, id: t.id }))
+            ]);
+            return [...prev, ...next];
+          });
           alert('导入成功！');
+          return;
+        }
+
+        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.templates)) {
+          setTemplates(prev => {
+            const takenTemplateIds = new Set(prev.map(t => t.id));
+            const takenGroupIds = new Set(templateGroups.map(g => g.id));
+
+            const templateIdMap = new Map<string, string>();
+            const importedTemplates: Template[] = parsed.templates
+              .filter(Boolean)
+              .map((t: Template) => {
+                const oldId = String(t.id || Date.now());
+                const newId = ensureUniqueId(takenTemplateIds, oldId);
+                templateIdMap.set(oldId, newId);
+                return { ...t, id: newId };
+              });
+
+            const importedGroups: TemplateGroup[] = Array.isArray(parsed.groups)
+              ? parsed.groups
+                  .filter(Boolean)
+                  .map((g: TemplateGroup) => {
+                    const oldId = String(g.id || Date.now());
+                    const newId = ensureUniqueId(takenGroupIds, oldId);
+                    return {
+                      ...g,
+                      id: newId,
+                      templateIds: Array.from(
+                        new Set((g.templateIds || []).map(tid => templateIdMap.get(String(tid)) || String(tid)))
+                      ).filter(tid => importedTemplates.some(t => t.id === tid) || prev.some(t => t.id === tid))
+                    };
+                  })
+              : [];
+
+            const importedOrder: SidebarOrderItem[] = Array.isArray(parsed.sidebarOrder)
+              ? parsed.sidebarOrder
+                  .filter(Boolean)
+                  .map((item: SidebarOrderItem) => {
+                    if (item.type === 'template') {
+                      const mapped = templateIdMap.get(String(item.id));
+                      return { type: 'template' as const, id: mapped || String(item.id) };
+                    }
+                    return item;
+                  })
+              : importedGroups.map(g => ({ type: 'group' as const, id: g.id }));
+
+            setTemplateGroups(groupPrev => [...groupPrev, ...importedGroups]);
+            setSidebarOrder(orderPrev => {
+              const existingGroupIds = new Set(orderPrev.filter(i => i.type === 'group').map(i => i.id));
+              const next = importedOrder.filter(item => {
+                if (item.type === 'template') return importedTemplates.some(t => t.id === item.id);
+                return importedGroups.some(g => g.id === item.id) && !existingGroupIds.has(item.id);
+              });
+              const appendedTemplates = importedTemplates
+                .map(t => t.id)
+                .filter(id => !next.some(i => i.type === 'template' && i.id === id))
+                .map(id => ({ type: 'template' as const, id }));
+              const appendedGroups = importedGroups
+                .map(g => g.id)
+                .filter(id => !next.some(i => i.type === 'group' && i.id === id))
+                .map(id => ({ type: 'group' as const, id }));
+              return [...orderPrev, ...appendedGroups, ...next, ...appendedTemplates];
+            });
+
+            alert('导入成功！');
+            return [...prev, ...importedTemplates];
+          });
+          return;
         }
       } catch (err) {
         alert('文件格式错误');
@@ -641,6 +971,7 @@ export default function App() {
         content: text
       };
       setTemplates(prev => [...prev, newTemplate]);
+      setSidebarOrder(prev => [...prev, { type: 'template' as const, id: newTemplate.id }]);
       setActiveTemplateId(newTemplate.id);
       setPreviewShowSource(false);
       alert('导入成功！');
@@ -681,10 +1012,51 @@ export default function App() {
           <div className="flex items-center gap-2 min-w-0">
             <div className="h-2.5 w-2.5 rounded-full bg-indigo-500 shadow-[0_0_0_3px_rgba(99,102,241,0.15)]" />
             <span className="text-sm font-semibold tracking-tight truncate">一世提示词管理</span>
+            <span className="text-[11px] px-2 py-0.5 rounded-full border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/40 text-slate-600 dark:text-slate-300">
+              v{__APP_VERSION__}
+            </span>
           </div>
         </div>
 
         <div className="titlebar-no-drag flex items-center">
+          <div ref={helpMenuRef} className="relative mr-1">
+            <button
+              type="button"
+              onClick={() => setHelpMenuOpen(v => !v)}
+              className="h-9 px-3 flex items-center gap-2 rounded-md hover:bg-slate-200/70 dark:hover:bg-slate-800/70 transition-colors text-sm"
+              aria-haspopup="menu"
+              aria-expanded={helpMenuOpen}
+            >
+              <HelpCircle className="w-4 h-4 text-slate-500 dark:text-slate-300" />
+              帮助
+            </button>
+            {helpMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-44 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg overflow-hidden z-50">
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
+                  onClick={() => {
+                    setHelpMenuOpen(false);
+                    checkForUpdates();
+                  }}
+                >
+                  <RefreshCw className="w-4 h-4 text-slate-500" />
+                  检查更新
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
+                  onClick={() => {
+                    setHelpMenuOpen(false);
+                    setAboutOpen(true);
+                  }}
+                >
+                  <Info className="w-4 h-4 text-slate-500" />
+                  关于
+                </button>
+              </div>
+            )}
+          </div>
           <button
             onClick={() => window.appWindow?.minimize?.()}
             className="h-9 w-10 flex items-center justify-center rounded-md hover:bg-slate-200/70 dark:hover:bg-slate-800/70 transition-colors"
@@ -712,6 +1084,12 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           templates={templates}
+          groups={templateGroups}
+          sidebarOrder={sidebarOrder}
+          onLayoutChange={(nextGroups, nextOrder) => {
+            setTemplateGroups(nextGroups);
+            setSidebarOrder(nextOrder);
+          }}
           activeTemplateId={activeTemplateId}
           onTemplateSelect={setActiveTemplateId}
           onAddTemplate={handleAddTemplate}
@@ -725,7 +1103,6 @@ export default function App() {
           onImport={handleImport}
           isDark={isDark}
           onToggleTheme={toggleTheme}
-          onReorderTemplates={setTemplates}
         />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -871,7 +1248,7 @@ export default function App() {
                       <div className="space-y-6">
                         {orderedVariables.length === 0 ? (
                           <div className="pt-4 text-center py-20 text-slate-500 italic">
-                            当前模板未识别到变量，批量生成无需使用，请切换到「单条生成」。
+                            当前模板未识别到变量，无需使用批量生成，请切换到「单条生成」。
                           </div>
                         ) : batchResults.length > 0 ? (
                           <>
@@ -946,7 +1323,10 @@ export default function App() {
               <h3 className="text-xl font-bold dark:text-white">
                 {editingTemplate?.id && templates.find(t => t.id === editingTemplate.id) ? '修改模板' : '创建新模板'}
               </h3>
-              <button onClick={() => setIsEditing(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
+              <button
+                onClick={() => setIsEditing(false)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -970,6 +1350,66 @@ export default function App() {
                   onChange={(e) => setEditingTemplate(prev => prev ? ({ ...prev, description: e.target.value }) : null)}
                   placeholder="简要描述模板用途"
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">所属分组</label>
+                <div ref={editorGroupPickerRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setEditorGroupPickerOpen(v => !v)}
+                    className="w-full px-4 py-2 border dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-left text-sm text-slate-700 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 truncate">
+                        {(() => {
+                          const g = templateGroups.find(x => x.id === editingGroupId);
+                          if (g) return g.name;
+                          return templateGroups.length === 0 ? '请先创建组' : '选择分组';
+                        })()}
+                      </div>
+                      <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform", editorGroupPickerOpen && "rotate-180")} />
+                    </div>
+                  </button>
+
+                  {editorGroupPickerOpen && (
+                    <div className="absolute left-0 right-0 top-full mt-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl overflow-hidden z-[60]">
+                      {templateGroups.length > 0 && (
+                        <div className="max-h-56 overflow-y-auto beautify-scrollbar py-1">
+                          {templateGroups.map(g => (
+                            <button
+                              key={g.id}
+                              type="button"
+                              onClick={() => {
+                                setEditingGroupId(g.id);
+                                setEditorGroupPickerOpen(false);
+                              }}
+                              className={cn(
+                                "w-full px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between gap-3",
+                                editingGroupId === g.id && "bg-indigo-50 dark:bg-indigo-500/10"
+                              )}
+                            >
+                              <span className="truncate">{g.name}</span>
+                              {editingGroupId === g.id && <span className="text-xs text-indigo-600 dark:text-indigo-300">已选</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <div className="p-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditorGroupPickerOpen(false);
+                            setEditorCreateGroupOpen(true);
+                            setEditorCreateGroupName('');
+                          }}
+                          className="w-full border border-dashed border-slate-300 dark:border-slate-600 rounded-lg py-2 text-sm text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center"
+                        >
+                          创建组
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -1044,6 +1484,193 @@ export default function App() {
                 className="px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-200"
               >
                 保存模板
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isEditing && editorCreateGroupOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-6 z-[60]"
+          onClick={() => setEditorCreateGroupOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold dark:text-white">创建组</h3>
+              <button
+                type="button"
+                onClick={() => setEditorCreateGroupOpen(false)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mt-4 space-y-2">
+              <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">组名称</label>
+              <input
+                value={editorCreateGroupName}
+                onChange={(e) => setEditorCreateGroupName(e.target.value)}
+                placeholder="例如：内容创作 / 营销文案"
+                className="w-full px-4 py-2 border dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none dark:bg-slate-800 dark:text-white"
+                autoFocus
+              />
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setEditorCreateGroupOpen(false)}
+                className="px-5 py-2 border dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors dark:text-white"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const id = createGroupWithName(editorCreateGroupName);
+                  if (id) {
+                    setEditingGroupId(id);
+                    setEditorGroupPickerOpen(false);
+                    setEditorCreateGroupOpen(false);
+                    setEditorCreateGroupName('');
+                  }
+                }}
+                disabled={!editorCreateGroupName.trim()}
+                className="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                创建
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {updateOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-6 z-[60]"
+          onClick={() => setUpdateOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold dark:text-white">检查更新</h3>
+              <button
+                type="button"
+                onClick={() => setUpdateOpen(false)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 text-sm text-slate-600 dark:text-slate-200">
+              {updateState.step === 'checking' && '正在检查更新…'}
+              {updateState.step === 'none' && `当前已是最新版本（v${updateState.currentVersion}）`}
+              {updateState.step === 'available' && (
+                <div className="space-y-1">
+                  <div>当前版本：v{updateState.currentVersion}</div>
+                  <div>最新版本：v{updateState.latestVersion}</div>
+                </div>
+              )}
+              {updateState.step === 'downloading' && `正在下载更新（v${updateState.latestVersion}）…`}
+              {updateState.step === 'downloaded' && `更新已下载完成（v${updateState.latestVersion}），是否立即安装？`}
+              {updateState.step === 'error' && `检查更新失败：${updateState.message}`}
+              {updateState.step === 'idle' && '点击“检查更新”后会在此显示结果。'}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              {updateState.step === 'available' && (
+                <button
+                  type="button"
+                  onClick={startDownloadAndInstall}
+                  className="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all"
+                >
+                  更新
+                </button>
+              )}
+              {updateState.step === 'downloaded' && (
+                <button
+                  type="button"
+                  onClick={() => window.appUpdate?.quitAndInstall?.()}
+                  className="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all"
+                >
+                  立即安装
+                </button>
+              )}
+              {updateState.step === 'checking' || updateState.step === 'downloading' ? (
+                <button
+                  type="button"
+                  className="px-5 py-2 border dark:border-slate-700 rounded-xl opacity-60 cursor-not-allowed dark:text-white"
+                  disabled
+                >
+                  请稍候
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setUpdateOpen(false)}
+                  className="px-5 py-2 border dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors dark:text-white"
+                >
+                  关闭
+                </button>
+              )}
+              {updateState.step !== 'checking' && updateState.step !== 'downloading' && (
+                <button
+                  type="button"
+                  onClick={checkForUpdates}
+                  className="px-5 py-2 border border-indigo-200 dark:border-indigo-400/30 text-indigo-700 dark:text-indigo-300 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+                >
+                  重新检查
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aboutOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-6 z-[60]"
+          onClick={() => setAboutOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold dark:text-white">关于</h3>
+              <button
+                type="button"
+                onClick={() => setAboutOpen(false)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mt-3 text-sm text-slate-600 dark:text-slate-200 space-y-2">
+              <div className="font-semibold text-slate-900 dark:text-white">一世提示词管理 v{__APP_VERSION__}</div>
+              <div>用于沉淀与管理提示词模板：支持变量识别、单条/批量生成、复制以及导入导出，帮助将提示词生产流程标准化、可复用、可追溯。</div>
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 p-3 text-xs space-y-1">
+                <div>• 模板分组与拖拽排序</div>
+                <div>• 批量生成变量顺序拖拽与规范提示</div>
+                <div>• GitHub Releases 更新检查与安装（安装版）</div>
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                如有问题请联系微信：a1meon
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setAboutOpen(false)}
+                className="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all"
+              >
+                知道了
               </button>
             </div>
           </div>

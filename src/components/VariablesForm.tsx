@@ -234,7 +234,7 @@ export const VariablesForm: React.FC<VariablesFormProps> = ({
       )}
 
       <textarea 
-        className="w-full h-52 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all dark:text-white beautify-scrollbar"
+        className="w-full h-52 p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-sm focus:ring-2 focus:ring-inset focus:ring-indigo-500 focus:border-indigo-400 dark:focus:border-indigo-400 focus:outline-none transition-all dark:text-white beautify-scrollbar"
         placeholder={`例：${variables.map(() => '值').join(', ')}`}
         value={batchInput}
         onChange={(e) => onBatchInputChange(e.target.value)}

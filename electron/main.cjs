@@ -3,6 +3,7 @@ const path = require('path');
 let mainWindow = null;
 let splashWindow = null;
 let updateCheckStarted = false;
+let updateFlowOwner = null;
 
 app.setName('一世提示词管理');
 
@@ -164,7 +165,7 @@ async function startUpdateCheck() {
     return;
   }
 
-  autoUpdater.autoDownload = true;
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
   const token =
@@ -177,7 +178,30 @@ async function startUpdateCheck() {
     };
   }
 
+  autoUpdater.on('update-available', async (info) => {
+    if (updateFlowOwner && updateFlowOwner !== 'startup') return;
+    updateFlowOwner = 'startup';
+    const parent = getDialogParent();
+    const result = await dialog.showMessageBox(parent ?? undefined, {
+      type: 'info',
+      buttons: ['下载更新', '稍后'],
+      defaultId: 0,
+      cancelId: 1,
+      title: '发现新版本',
+      message: `发现新版本 ${info?.version || ''}，是否立即下载？`
+    });
+    if (result.response === 0) {
+      try {
+        await autoUpdater.downloadUpdate();
+      } catch (err) {
+        console.error('[autoUpdater] download failed', err);
+      }
+    }
+  });
+
   autoUpdater.on('update-downloaded', async () => {
+    if (updateFlowOwner && updateFlowOwner !== 'startup') return;
+    updateFlowOwner = 'startup';
     const parent = getDialogParent();
     const result = await dialog.showMessageBox(parent ?? undefined, {
       type: 'info',
@@ -212,6 +236,7 @@ async function startUpdateCheck() {
   });
 
   try {
+    updateFlowOwner = 'startup';
     await autoUpdater.checkForUpdates();
   } catch (err) {
     console.error('[autoUpdater] checkForUpdates failed', err);
@@ -219,6 +244,75 @@ async function startUpdateCheck() {
 }
 
 app.whenReady().then(() => {
+  ipcMain.handle('app:getVersion', () => app.getVersion());
+
+  ipcMain.handle('update:check', async () => {
+    if (!app.isPackaged) {
+      return { status: 'error', message: '开发模式不支持自动更新检查' };
+    }
+    let autoUpdater;
+    try {
+      ({ autoUpdater } = require('electron-updater'));
+    } catch {
+      return { status: 'error', message: '更新模块未就绪' };
+    }
+    const token =
+      process.env.PROMPT_MANAGER_GH_TOKEN ||
+      process.env.GH_TOKEN ||
+      process.env.GITHUB_TOKEN;
+    if (token && typeof token === 'string') {
+      autoUpdater.requestHeaders = {
+        Authorization: `token ${token}`
+      };
+    }
+
+    updateFlowOwner = 'ipc';
+    autoUpdater.autoDownload = false;
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      if (!result || !result.updateInfo || !result.updateInfo.version) return { status: 'no_update' };
+      return {
+        status: 'update_available',
+        version: result.updateInfo.version,
+        releaseName: result.updateInfo.releaseName,
+        releaseNotes: typeof result.updateInfo.releaseNotes === 'string' ? result.updateInfo.releaseNotes : ''
+      };
+    } catch (err) {
+      return { status: 'error', message: String(err?.message || err || '') };
+    } finally {
+      updateFlowOwner = null;
+    }
+  });
+
+  ipcMain.handle('update:download', async () => {
+    if (!app.isPackaged) return { status: 'error', message: '开发模式不支持自动更新下载' };
+    let autoUpdater;
+    try {
+      ({ autoUpdater } = require('electron-updater'));
+    } catch {
+      return { status: 'error', message: '更新模块未就绪' };
+    }
+    updateFlowOwner = 'ipc';
+    try {
+      await autoUpdater.downloadUpdate();
+      return { status: 'downloaded' };
+    } catch (err) {
+      return { status: 'error', message: String(err?.message || err || '') };
+    } finally {
+      updateFlowOwner = null;
+    }
+  });
+
+  ipcMain.handle('update:quitAndInstall', () => {
+    let autoUpdater;
+    try {
+      ({ autoUpdater } = require('electron-updater'));
+    } catch {
+      return;
+    }
+    autoUpdater.quitAndInstall(false, true);
+  });
+
   ipcMain.handle('window:minimize', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;

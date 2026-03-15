@@ -6,6 +6,17 @@ export interface Template {
   variableOrder?: string[];
 }
 
+export interface TemplateGroup {
+  id: string;
+  name: string;
+  templateIds: string[];
+  collapsed?: boolean;
+}
+
+export type SidebarOrderItem =
+  | { type: 'template'; id: string }
+  | { type: 'group'; id: string };
+
 export type ActiveTab = 'single' | 'batch';
 
 export type CopyStatusKey = string;

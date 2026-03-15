@@ -15,3 +15,9 @@ contextBridge.exposeInMainWorld('appWindow', {
   }
 });
 
+contextBridge.exposeInMainWorld('appUpdate', {
+  getVersion: () => ipcRenderer.invoke('app:getVersion'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+  quitAndInstall: () => ipcRenderer.invoke('update:quitAndInstall')
+});
