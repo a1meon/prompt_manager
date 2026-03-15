@@ -1,0 +1,398 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 浅色主题 (默认) */
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light;
+  color: #213547;
+  background-color: #ffffff;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 深色主题 */
+:root.dark {
+  color-scheme: dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #1a1a1a;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+  height: 100vh;
+}
+
+#root {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.beautify-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.45) transparent;
+}
+
+:root.dark .beautify-scrollbar {
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+}
+
+.beautify-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.beautify-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.beautify-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+:root.dark .beautify-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.beautify-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.5);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+:root.dark .beautify-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.42);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.highlight-layer {
+  pointer-events: none;
+  scrollbar-gutter: stable;
+}
+
+.highlight-textarea {
+  -webkit-text-fill-color: transparent;
+  text-rendering: optimizeLegibility;
+  font-variant-ligatures: none;
+  overflow-wrap: break-word;
+  word-break: normal;
+  scrollbar-gutter: stable;
+}
+
+.highlight-textarea::selection {
+  background: rgba(99, 102, 241, 0.25);
+  color: transparent;
+}
+
+:root.dark .highlight-textarea::selection {
+  background: rgba(99, 102, 241, 0.35);
+  color: transparent;
+}
+
+.variable-editor:empty::before {
+  content: attr(data-placeholder);
+  color: rgba(148, 163, 184, 0.95);
+}
+
+:root.dark .variable-editor:empty::before {
+  color: rgba(100, 116, 139, 0.9);
+}
+
+.var-token {
+  display: inline-block;
+  border-radius: 8px;
+  padding: 0.01em 0.32em;
+  font-weight: 600;
+  line-height: inherit;
+  vertical-align: baseline;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.variable-editor .var-token {
+  cursor: text;
+  user-select: text;
+}
+
+.var-token-0 {
+  background: rgba(99, 102, 241, 0.15);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.22);
+  color: rgb(67, 56, 202);
+}
+
+:root.dark .var-token-0 {
+  background: rgba(99, 102, 241, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.28);
+  color: rgb(199, 210, 254);
+}
+
+.var-token-1 {
+  background: rgba(16, 185, 129, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.22);
+  color: rgb(4, 120, 87);
+}
+
+:root.dark .var-token-1 {
+  background: rgba(16, 185, 129, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.28);
+  color: rgb(167, 243, 208);
+}
+
+.var-token-2 {
+  background: rgba(245, 158, 11, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.22);
+  color: rgb(180, 83, 9);
+}
+
+:root.dark .var-token-2 {
+  background: rgba(245, 158, 11, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(252, 211, 77, 0.28);
+  color: rgb(254, 243, 199);
+}
+
+.var-token-3 {
+  background: rgba(244, 63, 94, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(244, 63, 94, 0.2);
+  color: rgb(190, 18, 60);
+}
+
+:root.dark .var-token-3 {
+  background: rgba(244, 63, 94, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(251, 113, 133, 0.28);
+  color: rgb(255, 205, 214);
+}
+
+.var-token-4 {
+  background: rgba(6, 182, 212, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(6, 182, 212, 0.2);
+  color: rgb(14, 116, 144);
+}
+
+:root.dark .var-token-4 {
+  background: rgba(6, 182, 212, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.28);
+  color: rgb(207, 250, 254);
+}
+
+.var-token-5 {
+  background: rgba(168, 85, 247, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.2);
+  color: rgb(126, 34, 206);
+}
+
+:root.dark .var-token-5 {
+  background: rgba(168, 85, 247, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(192, 132, 252, 0.28);
+  color: rgb(233, 213, 255);
+}
+
+.var-token-6 {
+  background: rgba(59, 130, 246, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.2);
+  color: rgb(29, 78, 216);
+}
+
+:root.dark .var-token-6 {
+  background: rgba(59, 130, 246, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.28);
+  color: rgb(219, 234, 254);
+}
+
+.var-token-7 {
+  background: rgba(20, 184, 166, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.2);
+  color: rgb(15, 118, 110);
+}
+
+:root.dark .var-token-7 {
+  background: rgba(20, 184, 166, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.28);
+  color: rgb(204, 251, 241);
+}
+
+/* 光标样式优化：只有按钮和真正可点击的元素显示手型光标 */
+button,
+[type="button"],
+[type="submit"],
+[type="reset"] {
+  cursor: pointer;
+}
+
+/* 移除 div 和其他非按钮元素的默认手型光标 */
+div.cursor-pointer {
+  cursor: default;
+}
+
+.md-render {
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.md-render h1,
+.md-render h2,
+.md-render h3 {
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0.9em 0 0.5em;
+}
+
+.md-render h1 {
+  font-size: 1.6em;
+}
+
+.md-render h2 {
+  font-size: 1.35em;
+}
+
+.md-render h3 {
+  font-size: 1.15em;
+}
+
+.md-render p {
+  margin: 0.55em 0;
+}
+
+.md-render ul,
+.md-render ol {
+  margin: 0.55em 0;
+  padding-left: 1.35em;
+}
+
+.md-render li {
+  margin: 0.2em 0;
+}
+
+.md-render blockquote {
+  margin: 0.7em 0;
+  padding: 0.7em 0.9em;
+  border-left: 3px solid rgba(99, 102, 241, 0.7);
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 10px;
+}
+
+:root.dark .md-render blockquote {
+  background: rgba(99, 102, 241, 0.14);
+}
+
+.md-render hr {
+  border: 0;
+  height: 1px;
+  background: rgba(148, 163, 184, 0.35);
+  margin: 1em 0;
+}
+
+.md-render a {
+  color: rgb(79, 70, 229);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+:root.dark .md-render a {
+  color: rgb(129, 140, 248);
+}
+
+.md-render code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.95em;
+  background: rgba(148, 163, 184, 0.22);
+  padding: 0.15em 0.35em;
+  border-radius: 8px;
+}
+
+:root.dark .md-render code {
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.md-render pre {
+  margin: 0.8em 0;
+  padding: 0.85em 0.95em;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.92);
+  color: rgba(226, 232, 240, 0.92);
+  overflow: auto;
+}
+
+.md-render pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.var-token .var-name {
+  color: inherit;
+}
+
+.md-editor-content {
+  caret-color: currentColor;
+}
+
+.md-editor-content .var-token {
+  cursor: text;
+  user-select: text;
+}
+
+.md-editor-content p {
+  margin: 0.55em 0;
+}
+
+.md-editor-content h1,
+.md-editor-content h2,
+.md-editor-content h3 {
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0.9em 0 0.5em;
+}
+
+.md-editor-content h1 {
+  font-size: 1.6em;
+}
+
+.md-editor-content h2 {
+  font-size: 1.35em;
+}
+
+.md-editor-content h3 {
+  font-size: 1.15em;
+}

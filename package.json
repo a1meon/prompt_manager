@@ -1,0 +1,87 @@
+{
+  "name": "prompt-manager",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "icon": "node scripts/generate-icon.cjs",
+    "clean:pack": "node -e \"const fs=require('fs'); const path=require('path'); const targets=['release','dist','.vite','.cache','node_modules/.cache']; for(const t of targets){ fs.rmSync(path.resolve(t),{recursive:true,force:true}); }\"",
+    "pack:exe": "npm run clean:pack && npm run build && set ELECTRON_BUILDER_CACHE=.cache\\electron-builder&& set ELECTRON_CACHE=.cache\\electron&& electron-builder --win portable",
+    "pack:exe:small": "npm run clean:pack && npm run build && set ELECTRON_BUILDER_CACHE=.cache\\electron-builder&& set ELECTRON_CACHE=.cache\\electron&& electron-builder --win portable -c.compression=maximum",
+    "pack:exe:fast": "npm run clean:pack && npm run build && set ELECTRON_BUILDER_CACHE=.cache\\electron-builder&& set ELECTRON_CACHE=.cache\\electron&& electron-builder --win portable -c.compression=normal",
+    "pack:installer": "npm run clean:pack && npm run build && set ELECTRON_BUILDER_CACHE=.cache\\electron-builder&& set ELECTRON_CACHE=.cache\\electron&& electron-builder --win nsis"
+  },
+  "dependencies": {
+    "@tiptap/extension-link": "^2.26.0",
+    "@tiptap/react": "^2.26.0",
+    "@tiptap/starter-kit": "^2.26.0",
+    "clsx": "^2.1.1",
+    "dompurify": "^3.2.6",
+    "lucide-react": "^0.446.0",
+    "markdown-it": "^14.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tiptap-markdown": "^0.8.10",
+    "tailwind-merge": "^2.5.2"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/react": "^18.3.10",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.27",
+    "electron": "^35.2.0",
+    "electron-builder": "^25.1.8",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  },
+  "build": {
+    "appId": "com.yishi.promptmanager",
+    "productName": "一世提示词管理",
+    "compression": "normal",
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "extraResources": [
+      {
+        "from": "public/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "一世提示词管理",
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "installerHeaderIcon": "public/icon.ico",
+      "artifactName": "一世提示词管理-安装程序.exe"
+    },
+    "portable": {
+      "artifactName": "一世提示词管理.exe"
+    }
+  }
+}
