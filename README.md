@@ -69,6 +69,7 @@ npm run pack:exe
 - 自动更新仅在打包后的应用中启用（开发模式不会检查更新）
 - 更新源为 GitHub Releases（见 `package.json` 中 `build.publish` 配置）
 - 发布新版本时需按版本号打包并上传 Release 产物
+- 如更新源为私有仓库，需要在运行环境配置 `PROMPT_MANAGER_GH_TOKEN`（或 `GH_TOKEN`）用于鉴权
 
 ## 文档
 

@@ -167,6 +167,16 @@ async function startUpdateCheck() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
+  const token =
+    process.env.PROMPT_MANAGER_GH_TOKEN ||
+    process.env.GH_TOKEN ||
+    process.env.GITHUB_TOKEN;
+  if (token && typeof token === 'string') {
+    autoUpdater.requestHeaders = {
+      Authorization: `token ${token}`
+    };
+  }
+
   autoUpdater.on('update-downloaded', async () => {
     const parent = getDialogParent();
     const result = await dialog.showMessageBox(parent ?? undefined, {
@@ -185,6 +195,20 @@ async function startUpdateCheck() {
 
   autoUpdater.on('error', (err) => {
     console.error('[autoUpdater] error', err);
+    const message = String(err?.message || err || '');
+    const isAuthRelated =
+      /status code:\s*(401|403|404)/i.test(message) ||
+      /unauthorized|forbidden|not\s+found/i.test(message);
+    if (isAuthRelated) {
+      dialog.showMessageBox(getDialogParent() ?? undefined, {
+        type: 'warning',
+        buttons: ['知道了'],
+        defaultId: 0,
+        title: '无法检查更新',
+        message: '当前更新源不可访问（可能是私有仓库权限导致）。',
+        detail: '请为应用进程配置环境变量 PROMPT_MANAGER_GH_TOKEN（或 GH_TOKEN）后重启应用。'
+      });
+    }
   });
 
   try {
